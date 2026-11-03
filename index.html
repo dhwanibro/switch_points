@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moral Switch Points</title>
+<style>
+  :root { --bg:#fafaf8; --fg:#1d1d1b; --mute:#6b6b66; --card:#fff; --line:#d9d9d2; --acc:#2f5d8a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161616; --fg:#eeeeea; --mute:#9a9a94; --card:#222; --line:#3a3a36; --acc:#7fb0e0; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.55 system-ui,-apple-system,Segoe UI,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:32px 20px 64px; }
+  h1 { font-size:1.3rem; margin:0 0 16px; }
+  a { color:var(--acc); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin:16px 0; }
+  .mute { color:var(--mute); font-size:.9rem; }
+  .opts { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+  @media (max-width:600px) { .opts { grid-template-columns:1fr; } }
+  button { font:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--acc); background:var(--acc); color:#fff; padding:12px 18px; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.opt { background:var(--card); color:var(--fg); border:2px solid var(--line); text-align:left; padding:18px; }
+  button.opt:hover { border-color:var(--acc); }
+  .opt b { display:block; margin-bottom:6px; color:var(--acc); }
+  .hint { display:block; margin-top:10px; font-size:.85rem; color:var(--mute); }
+  @media (pointer:coarse) { .hint { display:none; } }
+  .sum { overflow-x:auto; }
+  .tbl { width:100%; border-collapse:collapse; font-size:.82rem; margin-bottom:14px; }
+  .tbl th, .tbl td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  .hide { display:none; }
+  .prog { height:4px; background:var(--line); border-radius:2px; margin:6px 0 20px; }
+  .prog i { display:block; height:100%; background:var(--acc); border-radius:2px; width:0; transition:width .3s; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Moral Switch Points</h1>
+
+  <!-- Consent -->
+  <section id="s-consent" class="card hide">
+    <p><b>Participant Information</b></p>
+    <p>This study looks at how people make decisions in moral scenarios. You will read a short scenario and repeatedly choose between two options. It takes about 5–10 minutes.</p>
+    <p>The scenarios involve hypothetical life-and-death decisions, so some people may feel mild discomfort. Participation is voluntary. We do not collect your name, email or any other directly identifying information. We record your Prolific ID only to process payment and to match your responses to your submission; it is stored separately from your choices and is never published.</p>
+    <p>You may stop at any point by closing this page or returning the study on Prolific. If you want your data removed after finishing, message the researcher through Prolific within 14 days; we can find and delete it using your Prolific ID. After that, Prolific IDs are removed and the remaining data is fully anonymous and can no longer be withdrawn. Anonymised data (without Prolific IDs) may be shared on open-science platforms.</p>
+    <label><input type="checkbox" id="consent"> I am 18 or older, I have read and understood the above, and I voluntarily agree to take part.</label>
+    <p><button id="start" disabled>Continue</button></p>
+  </section>
+
+  <!-- Instructions -->
+  <section id="s-instr" class="card hide">
+    <p><b>Instructions</b></p>
+    <p>You will go through several short parts. In every part you see the same kind of scenario with two options, but the chances change from part to part. Choose the option you would actually prefer. There are no right or wrong answers. You can click an option or press the ← / → arrow key shown on it.</p>
+    <p>After each choice you will see the outcome, then press Continue (or the Enter key).</p>
+    <p><button id="begin">Begin</button></p>
+  </section>
+
+  <!-- Between parts -->
+  <section id="s-block" class="card hide">
+    <p><b id="block-msg"></b></p>
+    <p>The situation is the same, but the chances for the braking system have changed. Read the options carefully.</p>
+    <p><button id="go">Continue</button></p>
+  </section>
+
+  <!-- Trial -->
+  <section id="s-trial" class="hide">
+    <div class="mute" id="part"></div>
+    <div class="prog"><i id="bar"></i></div>
+    <div class="card">
+      <p id="scenario"></p>
+      <div class="opts" id="opts"></div>
+    </div>
+  </section>
+
+  <!-- Outcome (shown after either choice) -->
+  <section id="s-outcome" class="card hide">
+    <p><b>Outcome</b></p>
+    <p id="outcome-text"></p>
+    <p><button id="next">Continue</button></p>
+  </section>
+
+  <!-- Done -->
+  <section id="s-done" class="card hide">
+    <p><b>Thank you</b></p>
+    <p id="status">Your responses have been recorded. You can now close this page.</p>
+    <button id="retry" class="hide">Try again</button>
+    <p id="redir" class="hide"><a id="complete" href="#">Return to Prolific to confirm completion</a></p>
+    <p id="fallback" class="hide mute">If saving keeps failing, please don't close this page yet: press <b>Try again</b> once more. If it still fails, use the link above to return to Prolific so you are paid, and send the researcher a message on Prolific quoting this code: <b id="fb-code"></b>.</p>
+    <div id="summary" class="hide"></div>
+  </section>
+
+  <!-- Shown instead of the study when it is opened from Prolific but saving is not set up -->
+  <section id="s-config" class="card hide">
+    <p><b>This study is not available right now</b></p>
+    <p>Please return this study on Prolific (do not submit it). Sorry for the inconvenience.</p>
+  </section>
+
+  <!-- Researcher view: open the page with ?admin=1 -->
+  <section id="s-admin" class="card hide">
+    <p><b>Researcher view</b></p>
+    <p id="admin-count"></p>
+    <p><button id="a-json">Download all sessions (JSON)</button> <button id="a-csv">Download trials (CSV)</button>
+       <button id="a-sync">Upload unsent sessions to the sheet</button> <button id="a-clear">Delete all stored data</button></p>
+    <p class="mute">This lists only sessions stored in this browser on this device (including backups of sessions already sent to the sheet).</p>
+  </section>
+</main>
+
+<script>
+/* ---------- Configuration (edit here) ---------- */
+const CFG = {
+  LOW: 5, HIGH: 50,                 // the two outcomes of the gamble (people saved)
+  BLOCKS: [[50,50],[90,10],[10,90],[1,99],[99,1],[25,75],[75,25],[5,95],[95,5]],   // [% chance of LOW, % chance of HIGH]
+  START: 3,                         // initial certain option, same for every block
+  MIN_STEP: 2,                      // a block ends when the next (halved) step falls below this
+  MAX_STUCK: 5,                     // ... or after this many identical choices in a row (no switch)
+  CE_MIN: 1, CE_MAX: 50,            // bounds for the certain option
+  // REQUIRED before launch. If either is empty, anyone arriving from Prolific sees a "not available" screen.
+  SHEETS_URL: "",                   // Google Apps Script web-app URL ending in /exec (see apps-script/Code.gs)
+  COMPLETION_URL: "",               // Prolific completion URL, e.g. https://app.prolific.com/submissions/complete?cc=XXXX
+  SHOW_SUMMARY: false,              // show the session summary on the final screen (or add ?summary=1 to the URL to test)
+  AUTO_DOWNLOAD: false              // also save a JSON file to the device's Downloads folder at the end
+};
+const SCENARIO = "A runaway trolley is speeding down the tracks toward a group of workers who will be killed if it continues on its present course. You are too far away to warn them, but you have two options.";
+const params = new URLSearchParams(location.search);
+const PROLIFIC = {                                  // filled in by Prolific's URL parameters
+  prolific_pid: params.get("PROLIFIC_PID") || "",
+  study_id: params.get("STUDY_ID") || "",
+  prolific_session_id: params.get("SESSION_ID") || ""
+};
+const fromProlific = PROLIFIC.prolific_pid !== "";
+const showSummary = () => CFG.SHOW_SUMMARY || params.has("summary");
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const BLOCKS = shuffle(CFG.BLOCKS.map(([pl, ph]) => ({ pl, ph })));   // random order per participant
+
+/* ---------- Local backup (IndexedDB) ---------- */
+const openDB = () => new Promise((res, rej) => {
+  const r = indexedDB.open("moralswitchpoints", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("sessions", { keyPath: "session_id" });
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+const idb = async (mode, fn) => {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction("sessions", mode), req = fn(tx.objectStore("sessions"));
+    tx.oncomplete = () => res(req.result); tx.onerror = () => rej(tx.error);
+  });
+};
+const putSession = s => idb("readwrite", st => st.put(s));
+const allSessions = () => idb("readonly", st => st.getAll());
+const clearSessions = () => idb("readwrite", st => st.clear());
+const save = (name, type, body) => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([body], { type })); a.download = name; a.click();
+};
+
+/* ---------- Upload to Google Sheets (Apps Script web app) ---------- */
+async function sendToSheets(r) {
+  const res = await fetch(CFG.SHEETS_URL, { method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },   // plain text avoids a CORS preflight
+    body: JSON.stringify(r) });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || "rejected");
+}
+async function syncWithRetry(r) {                    // the server ignores duplicates, so retrying is safe
+  for (let i = 0; i < 3; i++) {
+    try { await sendToSheets(r); return true; }
+    catch (e) { await new Promise(s => setTimeout(s, 1000 * (i + 1))); }
+  }
+  return false;
+}
+
+/* ---------- Logging: every screen shown + every input ---------- */
+const $ = id => document.getElementById(id);
+const t0 = performance.now(), startISO = new Date().toISOString();
+const now = () => Math.round((performance.now() - t0) * 10) / 10;   // ms since page load
+const screens = [], events = [];
+let current = null;
+const show = (id, extra = {}) => {
+  document.querySelectorAll("section").forEach(s => s.classList.add("hide"));
+  const el = $(id); el.classList.remove("hide"); current = id;
+  screens.push({ seq: screens.length + 1, screen: id, block: blockNo, trial: trialNo, t_ms: now(), iso: new Date().toISOString(),
+                 text: el.innerText.replace(/\s+/g, " ").trim(), ...extra });   // text = what was rendered
+};
+const logEv = (type, d) => events.push({ type, t_ms: now(), block: blockNo, screen: current, trial: trialNo, ...d });
+document.addEventListener("keydown", e => { logEv("keydown", { key: e.key, code: e.code, repeat: e.repeat }); handleKey(e); }, true);
+document.addEventListener("keyup", e => logEv("keyup", { key: e.key, code: e.code }), true);
+document.addEventListener("click", e => {
+  const b = e.target.closest("button,input");
+  logEv("click", { target: b ? (b.id || b.dataset.kind || b.tagName) : "other", x: e.clientX, y: e.clientY });
+}, true);
+document.addEventListener("visibilitychange", () => logEv("visibility", { state: document.visibilityState }));
+
+/* ---------- State ---------- */
+const gambleLeft = Math.random() < 0.5;           // side of the gamble, fixed per participant
+const ORDER = gambleLeft ? ["gamble", "certain"] : ["certain", "gamble"];   // [left, right]
+const sessionId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
+let blockIdx = -1, blockNo = 0, B = null, blockTrial = 0;           // current block
+let ce, step, prev, stuck, lastCertain, lastGamble;                 // staircase state, reset every block
+let trialNo = 0, tShown = 0, trialScreenSeq = 0;
+const trials = [], blocks = [];
+
+/* ---------- Flow ---------- */
+$("consent").onchange = e => $("start").disabled = !e.target.checked;
+$("start").onclick = () => show("s-instr");
+$("begin").onclick = () => startBlock(0);
+$("go").onclick = () => { if (current === "s-block") nextTrial(); };
+
+function handleKey(e) {
+  if (e.repeat) return;
+  const go = e.key === "Enter" || e.key === " ";
+  if (current === "s-trial" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    e.preventDefault();
+    choose(ORDER[e.key === "ArrowLeft" ? 0 : 1], "key", e.key);
+  } else if (current === "s-outcome" && go) { e.preventDefault(); $("next").onclick(); }
+  else if (current === "s-block" && go) { e.preventDefault(); $("go").onclick(); }
+}
+
+function startBlock(i) {
+  blockIdx = i; blockNo = i + 1; B = BLOCKS[i];
+  ce = CFG.START; step = Math.ceil((CFG.HIGH - CFG.LOW) / 2);      // 45/2 = 22.5 -> 23
+  prev = null; stuck = 0; lastCertain = lastGamble = null; blockTrial = 0;
+  if (i === 0) nextTrial();
+  else { $("block-msg").textContent = `Part ${blockNo} of ${BLOCKS.length}`; show("s-block"); }
+}
+
+function optionText(kind) {
+  return kind === "gamble" ? `${B.pl}% chance of saving ${CFG.LOW} and ${B.ph}% chance of saving ${CFG.HIGH}`
+                           : `100% chance of saving ${ce}`;
+}
+function optionHTML(kind) {
+  return kind === "gamble"
+    ? `<b>Engage an experimental braking system</b>${B.pl}% chance that ${CFG.LOW} people are saved, and ${B.ph}% chance that ${CFG.HIGH} people are saved.`
+    : `<b>Divert the trolley</b>100% chance that ${ce} people are saved.`;
+}
+
+function nextTrial() {
+  trialNo++; blockTrial++;
+  $("part").textContent = `Part ${blockNo} of ${BLOCKS.length}`;
+  $("scenario").textContent = SCENARIO;
+  $("opts").innerHTML = "";
+  ORDER.forEach((kind, i) => {
+    const b = document.createElement("button");
+    b.className = "opt"; b.dataset.kind = kind;
+    b.innerHTML = optionHTML(kind) + `<span class="hint">Press ${i === 0 ? "←" : "→"}</span>`;
+    b.onclick = () => choose(kind, "click");
+    $("opts").appendChild(b);
+  });
+  $("bar").style.width = ((blockIdx + Math.min(0.9, blockTrial / 9)) / BLOCKS.length * 100) + "%";
+  show("s-trial", { certain_value: ce, step, left: ORDER[0], right: ORDER[1], p_low: B.pl, p_high: B.ph });
+  trialScreenSeq = screens.length;
+  tShown = performance.now();
+}
+
+function choose(choice, mode = "click", key = "") {
+  if (current !== "s-trial") return;                // ignore stray/double inputs
+  const t = { block: blockNo, p_low: B.pl, p_high: B.ph, block_trial: blockTrial, trial: trialNo,
+              certain_value: ce, choice, gamble_side: gambleLeft ? "left" : "right",
+              step_before: step, rt_ms: Math.round(performance.now() - tShown), t_choice_ms: now(),
+              response_mode: mode, response_key: key, screen_seq: trialScreenSeq,
+              gamble_outcome: "", reversal: 0,
+              left_option: optionText(ORDER[0]), right_option: optionText(ORDER[1]),
+              chosen_side: ORDER[0] === choice ? "left" : "right" };
+  trials.push(t);
+  let text, saved;
+  if (choice === "gamble") {
+    lastGamble = ce;
+    saved = t.gamble_outcome = Math.random() < B.ph / 100 ? CFG.HIGH : CFG.LOW;   // play out the gamble
+    text = `The braking system was engaged. ${saved} people were saved.`;
+  } else {
+    lastCertain = ce; saved = ce;
+    text = `You diverted the trolley. ${ce} people were saved.`;
+  }
+  $("outcome-text").textContent = text;
+  $("next").onclick = () => { if (current === "s-outcome") update(t); };
+  show("s-outcome", { outcome_for: choice, people_saved: saved });
+}
+
+function update(t) {
+  const dir = t.choice === "gamble" ? +1 : -1;      // gamble chosen -> make certain more attractive
+  const reversal = prev !== null && prev !== t.choice;
+  t.reversal = reversal ? 1 : 0;
+  stuck = reversal ? 1 : stuck + 1;
+  prev = t.choice;
+
+  if (stuck >= CFG.MAX_STUCK) return endBlock("no_switch", null);
+
+  if (reversal) {
+    const raw = step / 2;
+    if (raw < CFG.MIN_STEP) {                        // step size below 2 -> indifference point
+      return endBlock("converged", Math.floor(clamp(t.certain_value + dir * raw)));
+    }
+    step = Math.ceil(raw);                           // 23->12, 12->6, 6->3 ...
+  }
+  ce = clamp(ce + dir * step);
+  nextTrial();
+}
+
+const clamp = v => Math.max(CFG.CE_MIN, Math.min(CFG.CE_MAX, v));
+
+function endBlock(status, finalCE) {
+  const bt = trials.filter(t => t.block === blockNo), last = bt[bt.length - 1];
+  blocks.push({ block: blockNo, p_low: B.pl, p_high: B.ph, status, certain_equivalent: finalCE ?? "",
+    bracket_midpoint: (lastCertain !== null && lastGamble !== null) ? (lastCertain + lastGamble) / 2 : "",
+    n_trials: bt.length, terminated_trial: last.trial, terminated_block_trial: last.block_trial,
+    terminated_certain_value: last.certain_value, terminated_choice: last.choice,
+    termination_reason: status === "converged" ? `the participant switched and the next step size would fall below ${CFG.MIN_STEP}`
+                                               : `${CFG.MAX_STUCK} identical choices in a row without a switch` });
+  if (blockIdx + 1 < BLOCKS.length) startBlock(blockIdx + 1); else finish();
+}
+
+/* ---------- Finish: back up locally, upload, then release the participant ---------- */
+async function finish() {
+  show("s-done");
+  const result = { session_id: sessionId, ...PROLIFIC, status: "completed", n_trials: trials.length, gamble_left: gambleLeft,
+                   end_iso: new Date().toISOString(), user_agent: navigator.userAgent,
+                   block_order: BLOCKS.map(b => `${b.pl}/${b.ph}`).join(" "), start_iso: startISO,
+                   viewport: { w: innerWidth, h: innerHeight },
+                   config: { ...CFG, SHEETS_URL: undefined, COMPLETION_URL: undefined },
+                   blocks, trials, screens, events };
+  window.__result = result;
+  if (showSummary()) renderSummary(result);
+  const file = () => save(`moralswitchpoints_${sessionId.slice(0, 8)}.json`, "application/json", JSON.stringify(result, null, 1));
+  try { await putSession(result); } catch (e) { if (!CFG.SHEETS_URL) file(); }   // local backup
+  if (CFG.AUTO_DOWNLOAD) file();
+  if (CFG.SHEETS_URL) { $("retry").onclick = () => upload(result); upload(result); }
+}
+
+let failures = 0;
+async function upload(result) {
+  $("retry").classList.add("hide");
+  $("status").textContent = "Saving your responses… please do not close this page.";
+  if (await syncWithRetry(result)) {
+    result.synced = true; putSession(result).catch(() => {});
+    $("fallback").classList.add("hide");
+    $("status").textContent = "Your responses have been saved. Thank you!";
+    if (CFG.COMPLETION_URL) {
+      $("complete").href = CFG.COMPLETION_URL; $("redir").classList.remove("hide");
+      if (!showSummary()) setTimeout(() => location.href = CFG.COMPLETION_URL, 2500);
+    }
+  } else {
+    failures++;
+    $("status").textContent = "We couldn't save your responses. Please check your internet connection and try again.";
+    $("retry").classList.remove("hide");
+    if (failures >= 2 && CFG.COMPLETION_URL) {      // don't trap someone who finished: let them get paid
+      $("complete").href = CFG.COMPLETION_URL; $("redir").classList.remove("hide");
+      $("fb-code").textContent = sessionId.slice(0, 8);
+      $("fallback").classList.remove("hide");
+    }
+  }
+}
+
+/* ---------- Session summary shown on the final screen ---------- */
+function renderSummary(r) {
+  const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const lab = k => k === "gamble" ? "Gamble" : "Sure option";
+  const L = r.gamble_left ? "gamble" : "certain", R = r.gamble_left ? "certain" : "gamble";
+  const names = { "s-consent": "Consent", "s-instr": "Instructions", "s-block": "Part break", "s-trial": "Choice", "s-outcome": "Outcome", "s-done": "Thank you" };
+  const blockRows = r.blocks.map(b => `<tr><td>${b.block}</td><td>${b.p_low}% / ${b.p_high}%</td><td>${b.status === "converged" ? b.certain_equivalent : "none"}</td><td>${b.status}</td><td>${b.n_trials}</td>` +
+    `<td>trial ${b.terminated_block_trial} (sure option ${b.terminated_certain_value}, chose ${lab(b.terminated_choice).toLowerCase()}): ${esc(b.termination_reason)}</td></tr>`).join("");
+  const trialRows = r.trials.map(t => `<tr><td>${t.block}.${t.block_trial}</td><td>${lab(L)}: ${esc(t.left_option)}</td><td>${lab(R)}: ${esc(t.right_option)}</td>` +
+    `<td>${lab(t.choice)} (${t.chosen_side})</td><td>${(t.rt_ms / 1000).toFixed(2)} s, ${t.response_mode === "key" ? "key " + esc(t.response_key) : "click"}</td>` +
+    `<td>${t.choice === "gamble" ? t.gamble_outcome : t.certain_value} saved</td></tr>`).join("");
+  const slideRows = r.screens.map((s, i) => { const nx = r.screens[i + 1];
+    return `<tr><td>${s.seq}</td><td>${names[s.screen] || s.screen}${s.trial && s.screen !== "s-block" ? " " + s.block + "." + s.trial : ""}</td><td>${(s.t_ms / 1000).toFixed(1)}</td><td>${nx ? ((nx.t_ms - s.t_ms) / 1000).toFixed(1) : ""}</td><td>${esc(s.text)}</td></tr>`; }).join("");
+  const el = $("summary");
+  el.innerHTML = `<hr><p><b>Session summary</b></p>
+    <p><b>Parts</b> (in the order this participant saw them)</p><div class="sum"><table class="tbl"><tr><th>Part</th><th>Chances (low / high)</th><th>Certain equivalent</th><th>Status</th><th>Trials</th><th>Where it ended</th></tr>${blockRows}</table></div>
+    <p><b>Trial by trial</b> (part.trial)</p><div class="sum"><table class="tbl"><tr><th>#</th><th>Left option</th><th>Right option</th><th>Choice made</th><th>Time to respond</th><th>Result</th></tr>${trialRows}</table></div>
+    <p><b>Slide by slide</b></p><div class="sum"><table class="tbl"><tr><th>#</th><th>Slide</th><th>Shown at (s)</th><th>On screen (s)</th><th>What was presented</th></tr>${slideRows}</table></div>`;
+  el.classList.remove("hide");
+}
+
+/* ---------- Researcher view (?admin=1) ---------- */
+async function showAdmin() {
+  show("s-admin");
+  const s = await allSessions(), un = s.filter(x => !x.synced);
+  $("admin-count").textContent = `${s.length} session(s) stored in this browser` +
+    (CFG.SHEETS_URL ? `, ${un.length} not yet uploaded to the sheet.` : " (sheet upload not configured).");
+  $("a-json").onclick = () => save("moralswitchpoints_all.json", "application/json", JSON.stringify(s, null, 1));
+  $("a-csv").onclick = () => {
+    const cols = ["block","p_low","p_high","block_trial","trial","certain_value","choice","gamble_side","gamble_outcome","step_before",
+                  "reversal","rt_ms","t_choice_ms","response_mode","response_key","screen_seq","left_option","right_option","chosen_side"];
+    const head = [...cols, "session_id","prolific_pid","study_id","prolific_session_id",
+                  "block_status","block_certain_equivalent","block_bracket_midpoint","block_termination_reason"];
+    const rows = s.flatMap(r => r.trials.map(t => {
+      const b = (r.blocks || []).find(x => x.block === t.block) || {};
+      return [...cols.map(c => t[c]), r.session_id, r.prolific_pid || "", r.study_id || "", r.prolific_session_id || "",
+              b.status, b.certain_equivalent, b.bracket_midpoint, b.termination_reason];
+    }));
+    save("moralswitchpoints_trials.csv", "text/csv", [head, ...rows].map(x => x.join(",")).join("\n"));
+  };
+  $("a-sync").onclick = async () => {
+    for (const r of un) if (CFG.SHEETS_URL && await syncWithRetry(r)) { r.synced = true; await putSession(r); }
+    showAdmin();
+  };
+  $("a-clear").onclick = async () => {
+    if (confirm("Delete ALL stored sessions in this browser? Export them first.")) { await clearSessions(); showAdmin(); }
+  };
+}
+
+/* ---------- Boot ---------- */
+navigator.storage?.persist?.();                      // ask the browser not to evict the local backup
+if (params.has("admin")) showAdmin();
+else if (fromProlific && (!CFG.SHEETS_URL || !CFG.COMPLETION_URL)) show("s-config");   // never run a real participant without saving
+else show("s-consent");
+</script>
+</body>
+</html>
